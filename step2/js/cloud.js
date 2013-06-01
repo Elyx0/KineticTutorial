@@ -71,7 +71,8 @@ Cloud.buildTags = function () {
 Cloud.buildTag = function(tag,name){
 
 
-  //Building the text using coordinates
+  //Text coordinates are now 0,0 , the Kinetic.group will be in charge of the coordinates
+  // so we can move both the text + the blob in one block.
   var simpleText = new Kinetic.Text({
     x: 0,
     y: 0,
@@ -113,7 +114,7 @@ Cloud.buildTag = function(tag,name){
       width: simpleText.getWidth() + padding*2
     });
 
-
+  //Our group will be the size of our blob shape
   var group = new Kinetic.Group({
     x:tag.coords.x,
     y:tag.coords.y,
@@ -121,13 +122,12 @@ Cloud.buildTag = function(tag,name){
     width:blob.getWidth()
   });
 
+  //We add our blob & text to the group
   group.add(blob);
   group.add(simpleText);
   //We store the group object in the initial tags object for further use
   tag.group = group;
   this.layer.add(group);
-
-
 };
 
 WebFont.load({
