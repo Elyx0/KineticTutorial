@@ -9,7 +9,7 @@ $(function() {
 
   var tags = {
     "hello":{
-      importance:4,
+      importance:8,
       related: ["cookies","great"],
       coords: {x:250,y:175}
     },
@@ -73,8 +73,8 @@ Cloud.buildTag = function(tag,name){
 
   //Building the text using coordinates
   var simpleText = new Kinetic.Text({
-    x: tag.coords.x,
-    y: tag.coords.y,
+    x: 0,
+    y: 0,
     text: name.toUpperCase(),
     fontSize: 10*(1+tag.importance/6),
     name: name,
@@ -108,17 +108,25 @@ Cloud.buildTag = function(tag,name){
       }],
       strokeEnabled: false,
       fillRGB: BLOB_DEFAULT,
-      tension: 1
+      tension: 1,
+      height: simpleText.getHeight() + padding*1.7*2,
+      width: simpleText.getWidth() + padding*2
     });
 
 
-  var group = new Kinetic.Group({x: 0, y: 0});
+  var group = new Kinetic.Group({
+    x:tag.coords.x,
+    y:tag.coords.y,
+    height:blob.getHeight(),
+    width:blob.getWidth()
+  });
 
   group.add(blob);
   group.add(simpleText);
   //We store the group object in the initial tags object for further use
   tag.group = group;
   this.layer.add(group);
+
 
 };
 
