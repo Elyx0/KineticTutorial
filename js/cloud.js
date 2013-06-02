@@ -17,12 +17,19 @@ $(function() {
   var ATTRACT_MAX_TIME = 1;
   var ATTRACT_EASING = Kinetic.Easings.EaseOut;
 
+  var REPEL_MIN_TIME = 0.3;
+  var REPEL_MAX_TIME = 0.4;
+  var REPEL_EASING = Kinetic.Easings.BounceEaseOut;
+
   var LINE_REFRESH_RATE = 50;
+
+  //Switch to 1 to see debug boxes
+  var DEBUG_BOX = 0;
 
   tags = {
     "hello":{
       importance:8,
-      related: ["cookies","great"],
+      related: ["cookies","great","milk","elyx0"],
       coords: {x:250,y:175}
     },
     "cookies":{
@@ -34,7 +41,17 @@ $(function() {
       importance:3,
       related: ["cookies"],
       coords: {x:400,y:200}
-    }
+    },
+    "milk":{
+      importance:4,
+      related: ["hello","cookies"],
+      coords: {x:50,y:280}
+    },
+    "elyx0":{
+      importance:3,
+      related: ["hello","great"],
+      coords: {x:400,y:35}
+    },
   };
 
 //Defining canvas area
@@ -101,6 +118,7 @@ Cloud.addBindings =function(tag) {
       Cloud.drawJunction(tag,tags[tag.related[i]]); // Building junction between 2 Tags
       Cloud.attract(tag,tags[tag.related[i]]); // We create attraction
     }
+    Cloud.repelUnrelated(tag);
   });
 
   tag.group.on('mouseout',function(){
@@ -112,40 +130,90 @@ Cloud.addBindings =function(tag) {
     Cloud.linesLayer.removeChildren();
     Cloud.linesLayer.clear();
     // We send the attracted back by making them moveAround their initial position
-    for(var i=0,len=tag.related.length;i<len;i++) {
-      Cloud.moveAround(tags[tag.related[i]]);
+    for (var item in tags) {
+      Cloud.moveAround(tags[item]);
     }
 
     tag.tweenAround.play(); // We replay the movingaround animation
   });
 };
 
+Cloud.repelUnrelated = function(tag) {
+  var unrelated = Cloud.getUnrelated(tag);
+  for(var i=0,len=unrelated.length;i<len;i++) {
+    Cloud.repel(tag,tags[unrelated[i]]);
+  }
+};
 
-Cloud.attract = function(tag1,tag2){
+Cloud.repel = function(tag1,tag2) {
 
+  //If he's unrelated he'll just wander back there, we have to check if
+  // his ending zone will collide
+
+  var initialRect = Cloud.initialBox(tag2);
+  this.linesLayer.add(initialRect);
+  var initialBox = Cloud.buildr1r2(initialRect);
+
+  var tag1Box = this.buildIntersection(tag1,tag2);
+
+  var inter = Intersection.intersectRectangleRectangle(tag1Box.r1,tag1Box.r2,initialBox.r1,initialBox.r2);
+
+  if (inter.points[0]) {
+
+  //Original box will collide
+  var destination = this.extendLineFromPoints(tag1Box.p1,tag1Box.p2,tag1.drawBox.getWidth());
+
+  //Making tag2 go to that point
+  var tweenRepel = new Kinetic.Tween({
+    node:tag2.group,
+    duration: Cloud.randomBetween(REPEL_MIN_TIME,REPEL_MAX_TIME),
+    easing: REPEL_EASING,
+    x: destination.x,
+    y: destination.y
+  });
+
+  tweenRepel.play();
+}
+};
+
+Cloud.getUnrelated = function(tag){
+  //This return an array of tags name that are not related to the tag
+  // ie: for "milk" it returns ["great", "elyx0"]
+  return Object.keys(tags).filter(function(i){
+    var array = tag.related.slice(0);
+    array.push(tag.group.children[1].attrs.name);
+    return array.indexOf(i) == -1; });
+};
+
+Cloud.buildIntersection = function(tag1,tag2) {
   var p1 = new Point2D(tag1.group.getX(),tag1.group.getY()); //Our tag1 center
   var p2 = new Point2D(tag2.group.getX(),tag2.group.getY()); //Our tag2 center
 
   var r1 = new Point2D(tag1.drawBox.getX(),tag1.drawBox.getY()); //tag1 drawbox top left
   var r2 = new Point2D(r1.x + tag1.drawBox.getWidth(),r1.y + tag1.drawBox.getHeight()); //tag1 drawbox bottom right
 
-  var inter = Intersection.intersectLineRectangle(p1,p2,r1,r2);
+  return {p1:p1,p2:p2,r1:r1,r2:r2};
+};
 
-  //Drawing destinations points
-  $.each(inter.points,function(){
-    var circle = new Kinetic.Circle({
-      x: this.x,
-      y: this.y,
-      radius: 2,
-      fill: 'orange',
-      stroke: 'black',
-      strokeWidth: 2
-    });
-    Cloud.linesLayer.add(circle);
-  });
+Cloud.buildr1r2 = function(box) {
+  var r1 = new Point2D(box.getX(),box.getY()); //tag box top left
+  var r2 = new Point2D(r1.x + box.getWidth(),r1.y + box.getHeight()); //tag box bottom right
+  return {r1:r1,r2:r2};
+};
 
+Cloud.attract = function(tag1,tag2){
+
+  var points = this.buildIntersection(tag1,tag2);
 // Destination point
+var inter = Intersection.intersectLineRectangle(points.p1,points.p2,points.r1,points.r2);
 var destination = inter.points[0] || false;
+
+// The word is already inside the box
+if (!destination) {
+  var newP2 = this.extendLineFromPoints(points.p1,points.p2,tag1.group.getWidth()*2); //We make sure the new p2 is outside of the box
+  var inter = Intersection.intersectLineRectangle(points.p1,newP2,points.r1,points.r2); // We intersect it again
+  destination = inter.points[0];
+}
 
 if (destination) {
 //Making tag2 go to that point
@@ -154,53 +222,97 @@ var tweenAttract = new Kinetic.Tween({
   duration: Cloud.randomBetween(ATTRACT_MIN_TIME,ATTRACT_MAX_TIME),
   easing: ATTRACT_EASING,
   x: destination.x,
-  y: destination.y
+  y: destination.y,
 });
 
-//We play the animation
 tweenAttract.play();
 
 }
 
 };
+
+Cloud.extendLineFromPoints = function(p1,p2,distance){
+//
+// Remember that the canvas axis starts at the top left
+//
+//            (0;0)           x
+//                ------------->
+//                |
+//             y  |
+//                v
+//
+var a = (p2.y - p1.y)/(p2.x - p1.x);
+var b = p2.y /(a*p2.x);
+var m =  a;
+var l = distance;
+var x0 = p1.x;
+var y0 = p1.y;
+if (p1.x > p2.x) {
+  l = -l;
+}
+var p0x = x0 + (l/(Math.sqrt(1+(m*m)))); 
+var p0y = y0 + (a*l/(Math.sqrt(1+(m*m)))); 
+return {x:p0x,y:p0y};
+};
+
 Cloud.drawBox = function(tag) {
+  var box = Cloud.box(tag);
+  tag.drawBox = box;
+  this.linesLayer.add(box);
+};
 
-  var BOX_PADDING = 0; //Box padding will be the width of the biggest related tag
-  for(var i=0,len=tag.related.length;i<len;i++) {
-    if (tags[tag.related[i]].group.getWidth()/2 > BOX_PADDING) {
-      BOX_PADDING = tags[tag.related[i]].group.getWidth()/2;
-    }
-  }
-
-  var box = new Kinetic.Rect({
+Cloud.box = function(tag) {
+  var BOX_PADDING = Cloud.getPadding(tag);
+  return new Kinetic.Rect({
     x: tag.group.getX() - tag.group.getWidth()/2 - BOX_PADDING,
     y: tag.group.getY() - tag.group.getHeight()/2 - BOX_PADDING,
     width: tag.group.getWidth() + BOX_PADDING*2,
     height: tag.group.getHeight() + BOX_PADDING*2,
     stroke: 'black',
     strokeWidth: 1,
-    opacity: 1
+    opacity: DEBUG_BOX
   });
-  tag.drawBox = box;
-  this.linesLayer.add(box);
 };
 
-Cloud.drawJunction = function(tag1,tag2) {
-
-  var line = new Kinetic.Line({
-    points: [tag1.group.getX(), tag1.group.getY(), tag2.group.getX(), tag2.group.getY()],
-    stroke: 'rgba(0,0,0,0.2)',
+Cloud.initialBox = function(tag) {
+  var BOX_PADDING = Cloud.getPadding(tag);
+  return new Kinetic.Rect({
+    x: tag.coords.x - tag.group.getWidth()/2 - BOX_PADDING,
+    y: tag.coords.y - tag.group.getHeight()/2 - BOX_PADDING,
+    width: tag.group.getWidth() + BOX_PADDING*2,
+    height: tag.group.getHeight() + BOX_PADDING*2,
+    stroke: 'black',
     strokeWidth: 1,
-    lineJoin: 'round'
+    opacity: DEBUG_BOX
   });
+};
 
-  this.linesLayer.add(line);
-  line.moveToBottom();
-  var interval = setInterval(function(){
-    line.setPoints([tag1.group.getX(), tag1.group.getY(), tag2.group.getX(), tag2.group.getY()]);
-    line.setDashArray([10,Math.ceil(Math.random()*5)]);
-    Cloud.linesLayer.draw();
-  },LINE_REFRESH_RATE);
+Cloud.getPadding= function(tag) {
+    var BOX_PADDING = 0; //Box padding will be the width of the biggest related tag
+    for(var i=0,len=tag.related.length;i<len;i++) {
+      if (tags[tag.related[i]].group.getWidth()/2 > BOX_PADDING) {
+        BOX_PADDING = tags[tag.related[i]].group.getWidth()/2;
+      }
+    }
+    return BOX_PADDING;
+  };
+
+  Cloud.drawJunction = function(tag1,tag2) {
+
+    var line = new Kinetic.Line({
+      points: [tag1.group.getX(), tag1.group.getY(), tag2.group.getX(), tag2.group.getY()],
+      stroke: 'rgba(0,0,0,0.2)',
+      strokeWidth: 1,
+      lineJoin: 'round'
+    });
+
+    this.linesLayer.add(line);
+    line.moveToBottom();
+    var interval = setInterval(function(){
+      line.setPoints([tag1.group.getX(), tag1.group.getY(), tag2.group.getX(), tag2.group.getY()]);
+      line.setDashArray([10,Math.ceil(Math.random()*5)]);
+      Cloud.linesLayer.draw();
+    },LINE_REFRESH_RATE);
 
 tag1.linesIntervals.push(interval); // We add it to the lineIntervals array to be cleared out after
 };
